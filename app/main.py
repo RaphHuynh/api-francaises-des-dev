@@ -40,7 +40,7 @@ def api_post_member(member: MemberIn):
     return Response(status_code=200)
 
 
-@app.patch("/members/update")
+@app.patch("/members")
 def api_patch_member_update(member: MemberOut):
     result = patch_member_update(member)
     if result is not None:
