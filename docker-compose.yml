@@ -1,0 +1,49 @@
+version: '3.4'
+services:
+  api-francaises-des-dev-mysql:
+    image: mysql
+    container_name: api-francaises-des-dev-mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=password # Root user
+      - MYSQL_DATABASE=API_francaises_des_dev
+      - MYSQL_USER=api # API user
+      - MYSQL_PASSWORD=api
+    volumes:
+      - ./bd:/docker-entrypoint-initdb.d
+    ports:
+      - 32001:3306
+    networks:
+      - api-francaises-des-dev-network
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-uroot", "-ppassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: always
+
+  api-francaises-des-dev-api:
+    build: .
+    container_name: api-francaises-des-dev-api
+    tty: true
+    working_dir: /home
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./app:/home/app
+    environment:
+      - MYSQL_USER=api
+      - MYSQL_PASSWORD=api
+      - MYSQL_DATABASE=API_francaises_des_dev
+      - MYSQL_PORT=3306
+      - MYSQL_HOST=api-francaises-des-dev-mysql
+    depends_on: 
+      api-francaises-des-dev-mysql:
+        condition: service_healthy
+    networks:
+      - api-francaises-des-dev-network
+    ports:
+      - 8000:8000
+    restart: unless-stopped
+
+networks:
+  api-francaises-des-dev-network:
+    driver: bridge
