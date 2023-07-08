@@ -31,7 +31,7 @@ uvicorn app.main:app --reload
 ## Setup with docker
 
 Requirements:
-- Docker 4
+- Docker
 
 For the first setup you must build the image `docker-compose build`
 
