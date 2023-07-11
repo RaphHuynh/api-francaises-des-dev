@@ -31,10 +31,12 @@ uvicorn app.main:app --reload
 ## Setup with docker
 
 Requirements:
-- Docker 20
+- Docker
 
 For the first setup you must build the image `docker-compose build`
 
 Start everything `docker-compose up -d`
 
 Stop ```docker-compose stop```
+
+⚠️ If you update the requirements.txt, you must rebuild the image with `docker-compose build`
