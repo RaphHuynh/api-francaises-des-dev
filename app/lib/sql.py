@@ -7,14 +7,28 @@ from app.models import GetMembers, MemberIn, Category, CategoryOut, MemberWithCa
 
 from app import settings
 import mysql.connector
+import time
 
-mydb = mysql.connector.connect(
-    host=settings.HOST,
-    user=settings.USER,
-    password=settings.PASSWORD,
-    database=settings.DATABASE,
-    port=settings.PORT
-)
+retry_count = 0
+while retry_count < 10:
+    try:
+        mydb = mysql.connector.connect(
+            host=settings.HOST,
+            user=settings.USER,
+            password=settings.PASSWORD,
+            database=settings.DATABASE,
+            port=settings.PORT
+        )
+    except Exception as e:
+        retry_count += 1
+        if retry_count >= 10:
+            raise Exception(e)
+        else:
+            print(e)
+            print("Retry to connect to mysql in 30 seconds")
+            time.sleep(30)
+    else:
+        break
 
 
 async def get_members():
