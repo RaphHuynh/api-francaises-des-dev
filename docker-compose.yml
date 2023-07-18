@@ -5,9 +5,9 @@ services:
     container_name: api-francaises-des-dev-mysql
     environment:
       - MYSQL_ROOT_PASSWORD=password # Root user
-      - MYSQL_DATABASE=API_francaises_des_dev
-      - MYSQL_USER=api # API user
-      - MYSQL_PASSWORD=api
+      # - MYSQL_DATABASE=API_francaises_des_dev
+      # - MYSQL_USER=api # API user
+      # - MYSQL_PASSWORD=api
     volumes:
       - ./bd:/docker-entrypoint-initdb.d
     ports:
