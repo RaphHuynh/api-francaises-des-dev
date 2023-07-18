@@ -14,15 +14,10 @@ jobs:
       - name: Check out the repo 
         uses: actions/checkout@v3
       - name: Building docker
-        uses: isbang/compose-action@v1.4.1
-        with:
-          compose-file: "./docker-compose.yml"
-          up-flags: "--build"
-          down-flags: "--volumes"
+        run: docker-compose up --build -d
+      - name: Check running containers
+        run: docker ps
       - name: Run unit tests
-        uses: addnab/docker-run-action@v3
-        with:
-          image: 'Dockerfile'
-          run: pytest
+        run: docker exec api-francaises-des-dev-api pytest
 
   
