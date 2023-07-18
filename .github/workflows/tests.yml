@@ -7,9 +7,9 @@ on:
     branches: [ "main" ]
 
 env:
-  MYSQL_USER: api
-  MYSQL_PASSWORD: api
-  MYSQL_DATABASE: API_francaises_des_dev
+  MYSQL_USER: test
+  MYSQL_PASSWORD: test
+  MYSQL_DATABASE: API_francaises_des_dev_test
   MYSQL_PORT: 32001
   MYSQL_HOST: localhost
 
