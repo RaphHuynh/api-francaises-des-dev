@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Check out the repo 
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
       - name: Starting MySQL docker
         run: docker-compose up -d api-francaises-des-dev-mysql
       - name: Sleep for 30 seconds to wait for MySQL
