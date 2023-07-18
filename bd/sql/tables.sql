@@ -8,7 +8,7 @@
 -- Structure de la table `category`
 --
 
-CREATE TABLE `category` (
+CREATE TABLE IF NOT EXISTS `category` (
   `id` int(11) NOT NULL,
   `name` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -19,7 +19,7 @@ CREATE TABLE `category` (
 -- Structure de la table `member`
 --
 
-CREATE TABLE `member` (
+CREATE TABLE IF NOT EXISTS `member` (
   `id` int(11) NOT NULL,
   `username` varchar(50) NOT NULL,
   `lastname` varchar(50) NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE `member` (
 -- Structure de la table `member_has_category`
 --
 
-CREATE TABLE `member_has_category` (
+CREATE TABLE IF NOT EXISTS `member_has_category` (
   `id_member` int(11) NOT NULL,
   `id_category` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -49,7 +49,7 @@ CREATE TABLE `member_has_category` (
 -- Structure de la table `member_has_network`
 --
 
-CREATE TABLE `member_has_network` (
+CREATE TABLE IF NOT EXISTS `member_has_network` (
   `id_member` int(11) NOT NULL,
   `id_network` int(11) NOT NULL,
   `url` varchar(355) NOT NULL
@@ -61,7 +61,7 @@ CREATE TABLE `member_has_network` (
 -- Structure de la table `network`
 --
 
-CREATE TABLE `network` (
+CREATE TABLE IF NOT EXISTS `network` (
   `Id` int(11) NOT NULL,
   `name` varchar(30) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
