@@ -15,6 +15,10 @@ jobs:
         uses: actions/checkout@v3
       - name: Building docker
         run: docker-compose up --build -d
+      - name: Sleep for 30 seconds to wait for MySQL
+        uses: jakejarvis/wait-action@master
+        with:
+          time: '30s'
       - name: Check running containers
         run: docker ps
       - name: Run unit tests
