@@ -7,12 +7,22 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  unit-test:
+    name: Unit testing
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: isbang/compose-action@v1.4.1
+      - name: Check out the repo 
+        uses: actions/checkout@v3
+      - name: Building docker
+        uses: isbang/compose-action@v1.4.1
         with:
           compose-file: "./docker-compose.yml"
           up-flags: "--build"
           down-flags: "--volumes"
+      - name: Run unit tests
+        uses: addnab/docker-run-action@v3
+        with:
+          image: 'Dockerfile'
+          run: pytest
+
+  
