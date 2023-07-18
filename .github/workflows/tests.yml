@@ -33,11 +33,13 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Create Python venv
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m venv env
-          source env/bin/activate
+          pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Run unit tests
         run: |
