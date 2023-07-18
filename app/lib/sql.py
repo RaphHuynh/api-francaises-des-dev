@@ -289,3 +289,31 @@ async def register_token(access_token: str, refresh_token: str, id_user: int):
         return "Error SQL : the request was unsuccessfully..."
     cursor.close()
     return None
+
+async def drop_tables():
+    cursor = mydb.cursor()
+    sql = "DROP TABLE IF EXISTS category, member, member_has_category, member_has_network, network"
+    try:
+        cursor.execute(sql)
+        mydb.commit()
+    except mysql.connector.Error as e:
+        raise Exception(e)
+        return "ErrorSQL: the request was unsuccessful..."
+    cursor.close()
+    return None
+
+async def build_database():
+    cursor = mydb.cursor()
+    try:
+        with open('./bd/sql/tables.sql', 'r') as sql_file:
+            result_iterator = cursor.execute(sql_file.read(), multi=True)
+            for res in result_iterator:
+                print("Running query:", res)
+                print(f"Affected {res.rowcount} rows")
+            mydb.commit()
+    except mysql.connector.Error as e:
+        raise Exception(e)
+        return "ErrorSQL: the request was unsuccessful..."
+    # mydb.commit()
+    cursor.close()
+    return None
