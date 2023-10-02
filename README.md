@@ -28,3 +28,15 @@ uvicorn app.main:app --reload
 
 >⚠️ You need a virtual environment -> see the FastAPI document
 
+## Setup with docker
+
+Requirements:
+- Docker
+
+For the first setup you must build the image `docker-compose build`
+
+Start everything `docker-compose up -d`
+
+Stop ```docker-compose stop```
+
+⚠️ If you update the requirements.txt, you must rebuild the image with `docker-compose build`

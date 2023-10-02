@@ -7,14 +7,28 @@ from app.models import GetMembers, MemberIn, Category, CategoryOut, MemberWithCa
 
 from app import settings
 import mysql.connector
+import time
 
-mydb = mysql.connector.connect(
-    host=settings.HOST,
-    user=settings.USER,
-    password=settings.PASSWORD,
-    database=settings.DATABASE,
-    port=settings.PORT
-)
+retry_count = 0
+while retry_count < 10:
+    try:
+        mydb = mysql.connector.connect(
+            host=settings.HOST,
+            user=settings.USER,
+            password=settings.PASSWORD,
+            database=settings.DATABASE,
+            port=settings.PORT
+        )
+    except Exception as e:
+        retry_count += 1
+        if retry_count >= 10:
+            raise Exception(e)
+        else:
+            print(e)
+            print("Retry to connect to mysql in 30 seconds")
+            time.sleep(30)
+    else:
+        break
 
 
 async def get_members():
@@ -273,5 +287,33 @@ async def register_token(access_token: str, refresh_token: str, id_user: int):
         mydb.commit()
     except mysql.connector.Error:
         return "Error SQL : the request was unsuccessfully..."
+    cursor.close()
+    return None
+
+async def drop_tables():
+    cursor = mydb.cursor()
+    sql = "DROP TABLE IF EXISTS category, member, member_has_category, member_has_network, network"
+    try:
+        cursor.execute(sql)
+        mydb.commit()
+    except mysql.connector.Error as e:
+        raise Exception(e)
+        return "ErrorSQL: the request was unsuccessful..."
+    cursor.close()
+    return None
+
+async def build_database():
+    cursor = mydb.cursor()
+    try:
+        with open('./bd/sql/tables.sql', 'r') as sql_file:
+            result_iterator = cursor.execute(sql_file.read(), multi=True)
+            for res in result_iterator:
+                print("Running query:", res)
+                print(f"Affected {res.rowcount} rows")
+            mydb.commit()
+    except mysql.connector.Error as e:
+        raise Exception(e)
+        return "ErrorSQL: the request was unsuccessful..."
+    # mydb.commit()
     cursor.close()
     return None

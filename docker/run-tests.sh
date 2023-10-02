@@ -1,0 +1,1 @@
+MYSQL_USER=test MYSQL_PASSWORD=test MYSQL_DATABASE=API_francaises_des_dev_test pytest
