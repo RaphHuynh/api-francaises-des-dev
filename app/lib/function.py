@@ -1,22 +1,20 @@
 from fastapi import UploadFile
 
 
-def verifIsPngAndJpeg(file: UploadFile):
-    signatures = {
-        "png": b"\x89\x50\x4E\x47\x0D\x0A\x1A\x0A",
-        "jpeg/jpg": b"\xFF\xD8\xFF\xE0",
-        "jpeg/exif": b"\xFF\xD8\xFF\xE1",
-        "jpeg/spiff": b"\xFF\xD8\xFF\xE8",
-        "jpeg/jfif": b"\xFF\xD8\xFF\xDB",
-        "jpeg/2000": b"\x00\x00\x00\x0C\x6A\x50\x20\x20\x0D\x0A\x87\x0A"
-    }
+def isInvalidImage(upload: UploadFile):
+    signatures = (
+        b"\x89\x50\x4E\x47\x0D\x0A\x1A\x0A",                # PNG
+        b"\xFF\xD8\xFF\xE0",                                # JPEG/JPG
+        b"\xFF\xD8\xFF\xE1",                                # JPEG/EXIF
+        b"\xFF\xD8\xFF\xE8",                                # JPEG/SPIFF
+        b"\xFF\xD8\xFF\xDB",                                # JPEG/JFIF
+        b"\x00\x00\x00\x0C\x6A\x50\x20\x20\x0D\x0A\x87\x0A" # JPEG/2000
+    )
 
-    header = file.file.read(12)
-    file.file.seek(0)
+    header = upload.file.read(12)
+    upload.file.close()
 
-    for file_type, signature in signatures.items():
-        if header.startswith(signature):
-            return file_type
-    file.file.close()
-    return None
+    return not any(
+        header.startswith(signature) for signature in signatures
+    )
 

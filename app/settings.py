@@ -1,15 +1,18 @@
-import os
+from os import environ
+from dotenv import load_dotenv
 
-USER = os.environ.get("MYSQL_USER")
-PASSWORD = os.environ.get("MYSQL_PASSWORD")
-HOST = os.environ.get("MYSQL_HOST", default="localhost")
-DATABASE = os.environ.get("MYSQL_DATABASE")
-PORT = os.environ.get("MYSQL_PORT", default=3306)
-ALGORITHM = os.environ.get("ALGORITHM")
-SECRET_KEY = os.environ.get("SECRET_KEY")
+load_dotenv()
+
+USER       = environ.get("MYSQL_USER")
+PASSWORD   = environ.get("MYSQL_PASSWORD")
+HOST       = environ.get("MYSQL_HOST", default="localhost")
+DATABASE   = environ.get("MYSQL_DATABASE")
+PORT       = environ.get("MYSQL_PORT", default=3306)
+ALGORITHM  = environ.get("ALGORITHM")
+SECRET_KEY = environ.get("SECRET_KEY")
 
 GITHUB = {
-    "client_id": os.environ.get("GITHUB_CLIENT_ID"),
-    "client_secret": os.environ.get("GITHUB_CLIENT_SECRET"),
-    "callback_uri": os.environ.get("GITHUB_CALLBACK_URI")
+    "client_id":     environ.get("GITHUB_CLIENT_ID"),
+    "client_secret": environ.get("GITHUB_CLIENT_SECRET"),
+    "callback_uri":  environ.get("GITHUB_CALLBACK_URI")
 }

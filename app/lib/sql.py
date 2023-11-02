@@ -1,16 +1,12 @@
-from collections import namedtuple
-
-from fastapi import UploadFile
-
-from app.models import GetMembers, MemberIn, Category, CategoryOut, MemberWithCategory, \
-    GetMemberHasNetwork, Network, MemberHasNetwork, MemberHasCategory, MemberHasNetworkIn, MemberOut, Session, \
-    SessionCookie
-
-from app import settings
-from datetime import datetime, timedelta
 import mysql.connector
 
-from app.models.member_has_category import MemberHasCategoryOut
+from app import settings
+from app.models import *
+
+from fastapi import UploadFile
+from typing import List, Optional
+from datetime import datetime, timedelta
+
 
 mydb = mysql.connector.connect(
     host=settings.HOST,
@@ -21,340 +17,314 @@ mydb = mysql.connector.connect(
 )
 
 
-async def get_members():
-    cursor = mydb.cursor()
-    cursor.execute("SELECT member.id, member.username, member.url_portfolio, member.date_validate, "
-                   "member.date_deleted, GROUP_CONCAT(category.name) FROM member, member_has_category, category WHERE "
-                   "member.id=member_has_category.id_member AND member_has_category.id_category=category.id GROUP BY "
-                   "member.id")
-    result = cursor.fetchall()
-    member_record = namedtuple("Member", ["id", "username", "url_portfolio", "date_validate", "date_deleted", "name"])
-    cursor.close()
-    return [MemberWithCategory(id_member=member.id, username=member.username, url_portfolio=member.url_portfolio,
-                               category_name=member.name) for member in map(member_record._make, result)
-            if member.date_validate is not None and member.date_deleted is None]
+async def get_members() -> List[MemberWithCategory]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute("""
+            SELECT member.*, GROUP_CONCAT(category.name) AS cat_name
+            FROM member, member_has_category, category
+            WHERE member.id=member_has_category.id_member AND member_has_category.id_category=category.id
+            GROUP BY member.id
+        """)
+
+        return [
+            MemberWithCategory(id_member=row.id, username=row.username, url_portfolio=row.url_portfolio, category_name=row.cat_name)
+            for row in cursor.fetchall() if row.date_validate and not row.date_deleted
+        ]
 
 
-async def get_member_by_id(id_member):
-    member_record = namedtuple("Member",
-                               ["id", "username", "firstname", "lastname", "description", "mail", "url_portfolio",
-                                "date_validate", "date_deleted"])
-    cursor = mydb.cursor()
-    query = "SELECT {} FROM member WHERE id = %(id)s".format(", ".join(member_record._fields))
-    cursor.execute(query, {'id': id_member})
-    result = cursor.fetchone()
-    cursor.close()
-    if result is None:
-        return None
-    member = member_record._make(result)
-    return MemberIn(id=member.id, username=member.username, firstname=member.firstname, lastname=member.lastname,
-                    description=member.description, mail=member.mail, url_portfolio=member.url_portfolio)
+async def get_member_by_id(id_member) -> Optional[MemberIn]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute(
+            "SELECT id, username, firstname, lastname, description, mail, url_portfolio FROM member WHERE id = %s", (id_member,)
+        )
 
-
-async def create_member(member: MemberIn):
-    cursor = mydb.cursor()
-    sql = "INSERT INTO member (username, firstname, lastname, description, mail, url_portfolio) VALUES (%s, %s, %s, " \
-          "%s, %s, %s)"
-    val = (member.username, member.firstname, member.lastname, member.description, member.mail, member.url_portfolio)
-    try:
-        cursor.execute(sql, val)
-        mydb.commit()
-    except mysql.connector.Error:
-        return "ErrorSQL: the request was unsuccessful..."
-    id = cursor.lastrowid
-    cursor.close()
-    return id
-
-
-async def patch_member_update(member: MemberOut):
-    cursor = mydb.cursor()
-    sql = "UPDATE member SET firstname = %s, lastname = %s, description = %s, mail = %s, url_portfolio " \
-          "= %s WHERE id = %s"
-    val = (member.firstname, member.lastname, member.description, member.mail, member.url_portfolio, member.id)
-    try:
-        cursor.execute(sql, val)
-        mydb.commit()
-    except mysql.connector.Error:
-        return "ErrorSQL: the request was unsuccessful..."
-    cursor.close()
-    return None
-
-
-async def get_categories():
-    cursor = mydb.cursor()
-    cursor.execute("SELECT id, name FROM category")
-    result = cursor.fetchall()
-    category_record = namedtuple("Category", ["id", "name"])
-    cursor.close()
-    return [Category(id=category.id, name=category.name) for category in
-            map(category_record._make, result)]
-
-
-async def post_category(category: CategoryOut):
-    cursor = mydb.cursor()
-    sql = "INSERT INTO category (name) VALUES (%s)"
-    val = [category.name]
-    try:
-        cursor.execute(sql, val)
-        mydb.commit()
-    except mysql.connector.Error as exc:
-        return "ErrorSQL: the request was unsuccessful..."
-    cursor.close()
-    return None
-
-
-async def get_members_category(name_category: str):
-    cursor = mydb.cursor()
-    sql = "SELECT member.* FROM member, member_has_category, category WHERE member.id = member_has_category.id_member " \
-          "AND member_has_category.id_category = category.id AND category.name = %(name)s"
-    cursor.execute(sql, {"name": name_category})
-    result = cursor.fetchall()
-    member_record = namedtuple("Member",
-                               ["id", "username", "lastname", "firstname", "description", "mail", "date_validate",
-                                "date_deleted", "url_portfolio"])
-    cursor.close()
-    return [GetMembers(id=member.id, username=member.username, url_portfolio=member.url_portfolio) for member in
-            map(member_record._make, result)
-            if member.date_validate is not None and member.date_deleted is None]
-
-
-async def return_id_category_by_name(name: str):
-    cursor = mydb.cursor()
-    sql = "SELECT id FROM category WHERE name = %(name)s"
-    try:
-        cursor.execute(sql, {"name": name})
-        result = cursor.fetchone()
-        return result[0]
-    except TypeError:
-        return "ErrorSQL : the request was unsuccessful"
-
-
-async def post_add_category_on_member(member: MemberHasCategory):
-    cursor = mydb.cursor()
-    sql = """
-    INSERT INTO member_has_category (id_member, id_category) VALUES (%s, %s)
-    ON DUPLICATE KEY UPDATE id_member=id_member 
-    """
-    try:
-        values = []
-        for cate in member.id_category:
-            values.append([member.id_member, cate])
-        cursor.executemany(sql, values)
-        mydb.commit()
-    except mysql.connector.Error:
-        return "ErrorSQL: the request was unsuccessful..."
-    cursor.close()
-    return None
-
-
-async def get_network_of_member_by_id(id_member: int):
-    cursor = mydb.cursor()
-    sql = "SELECT network.name, member_has_network.url, member_has_network.id_network FROM network, member_has_network, member WHERE member.id = " \
-          "member_has_network.id_member AND member_has_network.id_network = network.id AND member.id = %(id)s"
-    cursor.execute(sql, {'id': id_member})
-    result = cursor.fetchall()
-    network_record = namedtuple("Network", ["name", "url", "id_network"])
-    cursor.close()
-    return [GetMemberHasNetwork(name=network.name, url=network.url, id_network=network.id_network) for network in map(network_record._make, result)]
-
-
-async def get_category_of_member_by_id(id_member: int):
-    cursor = mydb.cursor()
-    sql = "SELECT category.name FROM category, member, member_has_category WHERE member.id = " \
-          "member_has_category.id_member AND member_has_category.id_category = category.id AND member.id = %(id)s"
-    cursor.execute(sql, {'id': id_member})
-    result = cursor.fetchall()
-    category_record = namedtuple("Category", ["name"])
-    cursor.close()
-    return [CategoryOut(name=category.name) for category in map(category_record._make, result)]
-
-
-async def get_member_has_category_by_id_member(id_member: int):
-    cursor = mydb.cursor()
-    sql = "SELECT member_has_category.id_member, category.name, member_has_category.id_category FROM " \
-          "member, member_has_category, category WHERE member.id = member_has_category.id_member AND " \
-          "member_has_category.id_category = category.id AND member.id = %(id)s"
-    cursor.execute(sql, {'id': id_member})
-    result = cursor.fetchall()
-    category_record = namedtuple("MemberHasCategory", ["id_member","name","id_category"])
-    cursor.close()
-    return [MemberHasCategoryOut(id_member=category.id_member, name=category.name, id_category=category.id_category) for category in map(category_record._make, result)]
-
-
-async def get_network():
-    cursor = mydb.cursor()
-    sql = "SELECT * FROM network"
-    cursor.execute(sql)
-    result = cursor.fetchall()
-    network_record = namedtuple("Network", ["id", "name"])
-    cursor.close()
-    return [Network(id=network.id, name=network.name) for network in map(network_record._make, result)]
-
-
-async def post_network_on_member(member: MemberHasNetwork):
-    cursor = mydb.cursor()
-    sql = "INSERT INTO member_has_network (id_member, id_network, url) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE " \
-          "url = VALUES(url)"
-    try:
-        values = []
-        for url, network in zip(member.url, member.id_network):
-            if url != "" and url is not None:
-                values.append([member.id_member, network, url])
-        cursor.executemany(sql, values)
-        mydb.commit()
-    except mysql.connector.Error as e:
-        return "ErrorSQL: the request was unsuccessful..."
-    cursor.close()
-    return None
-
-
-async def delete_category_delete_by_member(member: MemberHasCategory):
-    cursor = mydb.cursor()
-    sql = "DELETE FROM member_has_category WHERE id_member = %s AND id_category = %s"
-    try:
-        values = []
-        for cate in member.id_category:
-            values.append([member.id_member, cate])
-        cursor.executemany(sql, values)
-        mydb.commit()
-    except mysql.connector.Error:
-        return "ErrorSQL: the request was unsuccessful..."
-    cursor.close()
-    return None
-
-
-async def delete_network_delete_by_member(member: MemberHasNetworkIn):
-    cursor = mydb.cursor()
-    sql = "DELETE FROM member_has_network WHERE id_member = %s AND id_network = %s"
-    try:
-        values = []
-        for network in member.id_network:
-            values.append([member.id_member, network])
-        cursor.executemany(sql, values)
-        mydb.commit()
-    except mysql.connector.Error:
-        return "ErrorSQL : the request was unsuccessful..."
-    cursor.close()
-    return None
-
-
-async def add_image_portfolio(file: UploadFile, id_member: int):
-    cursor = mydb.cursor()
-    sql = "UPDATE member SET image_portfolio = %s WHERE id = %s"
-    try:
-        cursor.execute(sql, (file.file.read(), id_member))
-        mydb.commit()
-    except mysql.connector.Error:
-        return "ErrorSQL : the request was unsuccessful..."
-    cursor.close()
-    file.file.close()
-    return None
-
-
-async def get_image_by_id_member(id: int):
-    try:
-        cursor = mydb.cursor()
-        sql = "SELECT image_portfolio FROM member WHERE id = %(id)s"
-        cursor.execute(sql, {'id': id})
-        result = cursor.fetchone()
-        cursor.close()
-        image = result[0]
-        return image
-    except mysql.connector.Error as e:
-        print(e)
-
-
-async def register_new_member(name: str):
-    cursor = mydb.cursor()
-    sql = "INSERT INTO member (username) VALUES (%s)"
-    try:
-        cursor.execute(sql, (name,))
-        mydb.commit()
-        id = cursor.lastrowid
-    except mysql.connector.Error as exc:
-        return "ErrorSQL: the request was unsuccessful..."
-    cursor.close()
-    return id
-
-
-async def get_member_by_username(username: str):
-    member_record = namedtuple("Member",
-                               ["id", "username", "firstname", "lastname", "description", "mail", "url_portfolio",
-                                "date_validate", "date_deleted"])
-    cursor = mydb.cursor()
-    query = "SELECT {} FROM member WHERE username = %(username)s".format(", ".join(member_record._fields))
-    cursor.execute(query, {'username': username})
-    result = cursor.fetchone()
-    cursor.close()
-    if result is None:
-        return None
-    member = member_record._make(result)
-    return MemberIn(id=member.id, username=member.username, firstname=member.firstname, lastname=member.lastname,
-                    description=member.description, mail=member.mail, url_portfolio=member.url_portfolio)
-
-
-async def register_token(access_token: str, refresh_token: str, id_user: int):
-    cursor = mydb.cursor()
-    query = "INSERT INTO session (token_session, token_refresh, id_member) VALUES (%s, %s, %s)"
-    val = (access_token, refresh_token, id_user)
-    try:
-        cursor.execute(query, val)
-        mydb.commit()
-    except mysql.connector.Error:
-        return "Error SQL : the request was unsuccessfully..."
-    cursor.close()
-    return None
-
-
-async def get_session(id_user: int):
-    session_record = namedtuple("Session",["access_token","refresh_token","id_member","date_created"])
-    cursor = mydb.cursor()
-    query = "SELECT * FROM session WHERE id_member = %(id_member)s"
-    try:
-        cursor.execute(query, {'id_member': id_user})
-        result = cursor.fetchone()
-        cursor.close()
-        if not result:
+        res = cursor.fetchone()
+        if not res:
             return None
-        else:
-            session = session_record._make(result)
-            return session
-    except mysql.connector.Error:
-        return None
+
+        return MemberIn(id=res.id, username=res.username, firstname=res.firstname, lastname=res.lastname,
+                        description=res.description, mail=res.mail, url_portfolio=res.url_portfolio)
 
 
-async def delete_session(id_user: int):
-    cursor = mydb.cursor()
-    query = "DELETE FROM session WHERE id_member = %(id_member)s"
-    try:
-        cursor.execute(query, {"id_member": id_user})
-        mydb.commit()
-    except mysql.connector.Error:
-        return "Error SQL"
-    cursor.close()
-    return None
+async def patch_member_update(member: MemberOut) -> int:
+    with  mydb.cursor() as cursor:
+        try:
+            cursor.execute(
+                "UPDATE member SET firstname = %s, lastname = %s, description = %s, mail = %s, url_portfolio = %s WHERE id = %s",
+                (member.firstname, member.lastname, member.description, member.mail, member.url_portfolio, member.id)
+            )
+
+            mydb.commit(); return 201
+        except mysql.connector.Error:
+            return 400
 
 
-async def verif_session(session: Session):
-    cursor = mydb.cursor()
-    session_record = namedtuple("Session", ["access_token", "refresh_token", "id_member","date_created"])
-    query = "SELECT * FROM session WHERE id_member = %(id_member)s"
-    try:
-        cursor.execute(query, {'id_member': session["user_id"]})
-        result = cursor.fetchone()
-        cursor.close()
-        if not result:
-            return None
-        else:
-            session_verif = session_record._make(result)
-            print(session_verif)
-            if session_verif.access_token == session["access_token"] and session_verif.refresh_token == session["refresh_token"]:
-                temps_date = timedelta(minutes=60)
-                if session_verif.date_created + temps_date > datetime.now():
-                    return True
-                else:
-                    return None
-            else:
+async def get_categories() -> List[Category]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute("SELECT id, name FROM category")
+        return [Category(id=row.id, name=row.name) for row in cursor.fetchall()]
+
+
+async def post_category(category: CategoryOut) -> int:
+    with mydb.cursor() as cursor:
+        try:
+            cursor.execute(
+                "INSERT INTO category (name) VALUES (%s)", (category.name,)
+            )
+
+            mydb.commit(); return 201
+        except mysql.connector.Error:
+            return 400
+
+
+async def get_members_category(name_category: str) -> List[GetMembers]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute(
+            """SELECT member.* FROM member, member_has_category, category
+               WHERE member.id = member_has_category.id_member AND member_has_category.id_category = category.id
+                                                               AND category.name = %s""", (name_category,)
+        )
+
+        res = cursor.fetchall()
+        print(res)
+
+        return [GetMembers(id=row.id, username=row.username, url_portfolio=row.url_portfolio)
+                for row in res if row.date_validate and not row.date_deleted]
+
+
+async def return_id_category_by_name(name: str) -> int:
+    with mydb.cursor(named_tuple=True) as cursor:
+        try:
+            cursor.execute(
+                "SELECT id FROM category WHERE name = %s", (name,)
+            )
+
+            res = cursor.fetchone()
+            if not res:
+                return -1
+            
+            return cursor.fetchone().id
+        except TypeError:
+            return -1
+
+
+async def post_add_category_on_member(member: MemberHasCategory) -> int:
+    with mydb.cursor() as cursor:
+        try:
+            cursor.executemany(
+                """INSERT INTO member_has_category (id_member, id_category) VALUES (%s, %s)
+                   ON DUPLICATE KEY UPDATE id_member=id_member 
+                """, [(member.id_member, cat) for cat in member.id_category]
+            )
+
+            mydb.commit(); return 201
+        except mysql.connector.Error:
+            return 400
+
+
+async def get_network_of_member_by_id(id_member: int) -> List[GetMemberHasNetwork]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute(
+            """SELECT network.name, member_has_network.url, member_has_network.id_network
+               FROM network, member_has_network, member
+               WHERE member.id = member_has_network.id_member AND member_has_network.id_network = network.id
+                                                              AND member.id = %s""", (id_member,)
+        )
+
+        return [GetMemberHasNetwork(name=row.name, url=row.url, id_network=row.id_network)
+                for row in cursor.fetchall()]
+
+
+async def get_category_of_member_by_id(id_member: int) -> List[CategoryOut]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute(
+            """SELECT category.name FROM category, member, member_has_category
+               WHERE member.id = member_has_category.id_member AND member_has_category.id_category = category.id
+                                                               AND member.id = %s""", (id_member,)
+        )
+
+        return [CategoryOut(name=row.name) for row in cursor.fetchall()]
+
+
+async def get_member_has_category_by_id_member(id_member: int) -> List[MemberHasCategoryOut]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute(
+            """SELECT member_has_category.id_member, category.name, member_has_category.id_category
+               FROM member, member_has_category, category
+               WHERE member.id = member_has_category.id_member AND member_has_category.id_category = category.id
+                                                               AND member.id = %s""", (id_member,)
+        )
+
+        return [
+            MemberHasCategoryOut(id_member=row.id_member, name=row.name, id_category=row.id_category)
+            for row in cursor.fetchall()
+        ]
+
+
+async def get_network() -> List[Network]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute("SELECT id, name FROM network")
+        return [Network(id=row.id, name=row.name) for row in cursor.fetchall()]
+
+
+async def post_network_on_member(member: MemberHasNetwork) -> int:
+    with mydb.cursor() as cursor:
+        try:
+            cursor.executemany(
+                """INSERT INTO member_has_network (id_member, id_network, url)
+                   VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE url = VALUES(url)
+                """,
+                [(member.id_member, net, url) for net, url in zip(member.id_network, member.url) if url]
+            )
+
+            mydb.commit(); return 201
+        except mysql.connector.Error:
+            return 400
+
+
+async def delete_category_delete_by_member(member: MemberHasCategory) -> int:
+    with mydb.cursor() as cursor: 
+        try:
+            cursor.executemany(
+                "DELETE FROM member_has_category WHERE id_member = %s AND id_category = %s",
+                [(member.id_member, cat) for cat in member.id_category]
+            )
+
+            mydb.commit(); return 200
+        except mysql.connector.Error:
+            return 400
+
+
+async def delete_network_delete_by_member(member: MemberHasNetworkIn) -> int:
+    with mydb.cursor() as cursor:
+        try:
+            cursor.executemany(
+                "DELETE FROM member_has_network WHERE id_member = %s AND id_network = %s",
+                [(member.id_member, net) for net in member.id_network]
+            )
+
+            mydb.commit(); return 200
+        except mysql.connector.Error:
+            return 400
+
+
+async def add_image_portfolio(upload: UploadFile, id_member: int) -> int:
+    with mydb.cursor() as cursor:
+        try:
+            cursor.execute(
+                "UPDATE member SET image_portfolio = %s WHERE id = %s",
+                (upload.file.read(), id_member)
+            )
+
+            upload.file.close()
+            mydb.commit(); return 200
+        except mysql.connector.Error:
+            return 500
+
+
+async def get_image_by_id_member(id_member: int) -> Optional[bytes]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        try:
+            cursor.execute(
+                "SELECT image_portfolio FROM member WHERE id = %s", (id_member,)
+            )
+
+            res = cursor.fetchone()
+            if not res:
                 return None
-    except mysql.connector.Error:
-        return None
+            
+            return res.image_portfolio
+        except mysql.connector.Error:
+            return None
+
+
+async def register_new_member(name: str) -> Optional[int]:
+    with mydb.cursor() as cursor:
+        try:
+            cursor.execute(
+                "INSERT INTO member (username) VALUES (%s)", (name,)
+            )
+
+            mydb.commit(); return cursor.lastrowid
+        except mysql.connector.Error:
+            return None
+
+
+async def get_member_by_username(username: str) -> Optional[MemberIn]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        cursor.execute(
+            """SELECT id, username, firstname, lastname, description, mail, url_portfolio
+               FROM member WHERE username = %s""", (username,)
+        )
+
+        res = cursor.fetchone()
+        if not res:
+            return None
+        
+        return MemberIn(id=res.id, username=res.username, firstname=res.firstname, lastname=res.lastname,
+                        description=res.description, mail=res.mail, url_portfolio=res.url_portfolio)
+
+
+async def register_token(access_token: str, refresh_token: str, id_user: int) -> int:
+    with mydb.cursor() as cursor:
+        try:
+            cursor.execute(
+                "INSERT INTO session (token_session, token_refresh, id_member) VALUES (%s, %s, %s)",
+                (access_token, refresh_token, id_user)
+            )
+
+            mydb.commit(); return 201
+        except mysql.connector.Error:
+            return 400
+
+
+async def get_session(id_user: int) -> Optional[Session]:
+    with mydb.cursor(named_tuple=True) as cursor:
+        try:
+            cursor.execute(
+                "SELECT * FROM session WHERE id_member = %s", (id_user,)
+            )
+
+            result = cursor.fetchone()
+            if not result:
+                return None
+            
+            return Session(access_token=result.access_token, refresh_token=result.refresh_token,
+                           id_member=result.id_member, date_created=result.date_created)
+        except mysql.connector.Error:
+            return None
+
+
+async def delete_session(id_user: int) -> int:
+    with mydb.cursor() as cursor:
+        try:
+            cursor.execute(
+                "DELETE FROM session WHERE id_member = %s", (id_user,)
+            )
+
+            mydb.commit(); return 200
+        except mysql.connector.Error:
+            return 400
+
+
+async def verif_session(session: dict) -> int:
+    with mydb.cursor(named_tuple=True) as cursor:
+        try:
+            cursor.execute(
+                "SELECT * FROM session WHERE id_member = %s", (session["user_id"],)
+            )
+
+            result = cursor.fetchone()
+            if not result:
+                return 401
+
+            session_verif = Session(access_token=result.access_token, refresh_token=result.refresh_token,
+                                    id_member=result.id_member, date_created=result.date_created)
+
+            if session_verif.access_token == session["access_token"] and \
+               session_verif.refresh_token == session["refresh_token"] and \
+               session_verif.date_created + timedelta(minutes=60) > datetime.now():
+                return 200
+            return 401
+        except mysql.connector.Error:
+            return 401

@@ -1,7 +1,8 @@
+from .routers import *
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import *
-from .routers import router_session
+
 
 app = FastAPI()
 
@@ -19,14 +20,10 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
-
-app.include_router(router_github.router)
-app.include_router(router_member.router)
-app.include_router(router_category.router)
-app.include_router(router_network.router)
-app.include_router(router_session.router)
+for router in routers:
+    app.include_router(router)

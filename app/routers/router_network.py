@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Response
-
 from app.lib.sql import *
+
 from typing import List
+from fastapi import APIRouter
+
 
 router = APIRouter(
     prefix="/network",
