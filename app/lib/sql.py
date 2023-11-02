@@ -85,11 +85,8 @@ async def get_members_category(name_category: str) -> List[GetMembers]:
                                                                AND category.name = %s""", (name_category,)
         )
 
-        res = cursor.fetchall()
-        print(res)
-
         return [GetMembers(id=row.id, username=row.username, url_portfolio=row.url_portfolio)
-                for row in res if row.date_validate and not row.date_deleted]
+                for row in cursor.fetchall() if row.date_validate and not row.date_deleted]
 
 
 async def return_id_category_by_name(name: str) -> int:
